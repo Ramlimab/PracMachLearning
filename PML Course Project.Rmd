@@ -1,0 +1,93 @@
+---
+title: "Practical Machine Learning Course Project"
+author: "Muhamad Azfar Ramli"
+date: "1 March 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+First we load the libraries and datasets required for the project.
+
+```{r init}
+library(caret)
+library(rattle)
+library(ggplot2)
+library(randomForest)
+library(e1071)
+
+training<-read.table("pml-training.csv", header=TRUE, sep=",")
+validate<-read.table("pml-testing.csv",header=TRUE, sep=",")
+```
+
+##Understanding and preparing the datasets
+
+When we look at the summary of both the training and test datasets, we immediately note that the first few columns (name and timestamps) are also not useful for our model prediction. We also note that there are various columns (kurtosis, skewness,min max) with only NA values.  We therefore also remove these columns from the training dataset.  
+
+```{r dataset and partitioning,cache=TRUE}
+summary(validate)
+features <- names(validate[,colSums(is.na(validate)) == 0])[8:59]
+training <- training[,c(features,"classe")]
+projsubmission <- validate[,c(features,"problem_id")]
+
+set.seed(100)
+trainix<-createDataPartition(training$classe,p=0.8,list=FALSE)
+training2=training[trainix,]
+testing=training[-trainix,]
+
+```
+##Testing out initial modelling methods
+
+Next we partition 80% of the dataset into a training set and use the other 20% to do testing.  
+We trained a decision tree model as our first model.  However, the accuracy is only approximately 50%
+
+```{r Decision Tree Model,cache=TRUE}
+DTmodel<-train(classe~.,data=training2,method='rpart')
+DTprediction=predict(DTmodel,testing)
+confusionMatrix(DTprediction,testing$classe)$overall['Accuracy']
+#varImp(DTmodel)
+```
+#Using Random Foret Model
+We therefore switch to using a Random Forest Model to attempt to improve the prediction.
+Indeed, the Random Forest Model provides 99% accuracy on the test set.
+We can also highlight the top ten most important features in the dataset.
+
+```{r Random Forest Model,cache=TRUE}
+RFmodel<-randomForest(classe~.,data=training2)
+RFprediction=predict(RFmodel,testing)
+confusionMatrix(RFprediction,testing$classe)$overall['Accuracy']
+VI<-varImp(RFmodel)
+VI<-VI[order(VI$Overall,decreasing = T),,drop=FALSE]
+VI[1:10,,drop=FALSE]
+
+```
+##Testing alternative models
+
+We also attempt another two different models, Linear Discriminant Analysis(LDA) and Support Vector Machines(SVM).
+However, the results show that the Random Forest Model still produces the best accuracy
+
+```{r Alternative model, cache=TRUE}
+SVMmodel<-svm(classe~.,data=training2)
+SVMprediction=predict(SVMmodel,testing)
+#confusionMatrix(SVMprediction,testing$classe)
+
+LDAmodel<-train(classe~.,data=training2,method='lda')
+LDAprediction=predict(LDAmodel,testing)
+
+confusionMatrix(SVMprediction,testing$classe)$overall['Accuracy']
+confusionMatrix(LDAprediction,testing$classe)$overall['Accuracy']
+```
+
+##Test Predictions
+Finally, we use the best model (Random Forest) to make predictions on the original 20 test rows.
+The answers are provided here.
+
+```{r Test results,cache=TRUE}
+submission<-predict(RFmodel,projsubmission)
+```
+
+
